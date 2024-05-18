@@ -24,7 +24,7 @@ There are two kinds of input files - (a) user data and (b) system data. The form
 
 4. **KEGG**  --  the KEGG pathway annotation of human and mouse.
 
-5. **WikiPathways**  --  the WikiPathways annotation of human and mouse.
+5. **WikiPathways**  --  the WikiPathways annotation of human and mouse. The compressed package needs to be decompressed before running the program.
 
 # Usage
 Here is a command line to run the eGRAMv2R1 program:
