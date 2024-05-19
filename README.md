@@ -2,7 +2,7 @@
 
 The eGRAMv2R1 program identifies gene modules comprising co-expressed genes, their regulatory lncRNAs and their regulatory TFs based on lncRNA/DNA bindings, TF/DNA bindings and gene expression correlations.
 
-There are two kinds of input files - (a) user data and (b) system data. The former has three files - (a) expression profile, (b) lncRNA target prediction, (c) TF target prediction. LncRNAs' targets are predicted using LongTarget (or the more rapid version Farsim); TFs' targets are predicted using any method, such as CellOracle. Since the primary goal of eGRAM is analyzing lncRNA function in transcriptional regulation, the TF target prediction file is optional. System data include human/mouse KEGG and wikipathway pathways downloaded from the KEGG and Wikipathways websites.
+There are two kinds of input files - (a) user data and (b) system data. The former has three files - (a) expression profile, (b) lncRNA target prediction, (c) TF target prediction. LncRNAs' targets are predicted using LongTarget (or the more rapid version Fasim); TFs' targets are predicted using any method, such as CellOracle. Since the primary goal of eGRAM is analyzing lncRNA function in transcriptional regulation, the TF target prediction file is optional. System data include human/mouse KEGG and wikipathway pathways downloaded from the KEGG and Wikipathways websites.
 
 # Requirements
 1. **Python**: >=3.7.0
