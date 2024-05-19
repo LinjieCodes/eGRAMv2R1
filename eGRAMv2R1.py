@@ -507,9 +507,9 @@ def write_modules(dict_module_regulators, dict_module_kegg, dict_module_wiki, ou
                            'LncRNA(*)/TF(#)',
                            'Target gene',
                            'KEGG pathway, pathwayID, and FDR',
-                           'Hit genes of top one significant KEGG pathway',
+                           'Hit genes of enriched KEGG pathways',
                            'WikiPathway, pathwayID, and FDR',
-                           'Hit genes of top one significant Wikipathway'])+'\n')
+                           'Hit genes of enriched Wikipathways'])+'\n')
         moduleID = 0
         for module in dict_module_regulators:
             moduleID += 1
