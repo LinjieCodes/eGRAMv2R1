@@ -16,7 +16,7 @@ There are two kinds of input files - (a) user data and (b) system data. The form
 5. **OS**: the eGRAMv2R1 code has been tested on Linux system.
 
 # Data
-1. **2024May-DEG-exp-A549-2513WT.csv**  --  the gene expression matrix.
+1. **2024May-DEG-exp-A549-2513.csv**  --  the gene expression matrix.
 
 2. **2024May-lncRNA-DBS-A549-2513.csv**  --  the DNA binding matrix (i.e. target genes) of lncRNAs.
 
@@ -30,7 +30,7 @@ There are two kinds of input files - (a) user data and (b) system data. The form
 Here is a command line to run the eGRAMv2R1 program:
 
 ```
-'Example: python eGRAMv2R1.py --exp 2024May-DEG-exp-A549-2513WT.csv --lncDBS 2024May-lncRNA-DBS-A549-2513.csv --tfDBS 2024May-TF-DBS-A549-2513.csv --species 1 --lncCutoff 100 --tfCutoff 8 --lncCorr 0.5 --tfCorr 0.5 --moduleSize 50 --corr Pearson --cluster COCO --fdr 0.01 --out myout'
+'Example: python eGRAMv2R1.py --exp 2024May-DEG-exp-A549-2513.csv --lncDBS 2024May-lncRNA-DBS-A549-2513.csv --tfDBS 2024May-TF-DBS-A549-2513.csv --species 1  --lncCutoff 100 --tfCutoff 8 --lncCorr 0.5 --tfCorr 0.5 --moduleSize 50 --corr Pearson --remove_redundancy y --fdr 0.05  --out myout'
 ```
 
 # Help information
@@ -48,7 +48,7 @@ Parameters      Functions
 --tfCorr     the correlation threshold for TF/target and TF/TF (default=0.5).
 --moduleSize the minimum gene number of a module (default=50).
 --corr       Pearson/Spearman (default=pearson).
---cluster    clustering (default=COCO, see 2018Saelons).
+--remove_redundancy    y/n, whether or not merge modules with the same gene sets (default=y)
 --fdr        the FDR value to determine significance of pathway enrichment (default 0.01).
 --out        output file name.
 ```

@@ -54,6 +54,7 @@ import numpy as np
 import pandas as pd
 import re
 import os
+import csv
 import sys, getopt
 from scipy.stats import hypergeom
 #from sklearn.impute import SimpleImputer
@@ -218,7 +219,7 @@ def generate_lncRNA_sets(list_lncRNA, df_lncRNA_lncRNA_corr):
 
         lncRNAset = set(list_lncRNA) - set(deleted)
         if list_lncRNA[row] not in deleted:
-            lncRNAlist = list(lncRNAset)
+            lncRNAlist = sorted(list(lncRNAset))
         else:
             lncRNAlist = []
         dict_lncRNAsets.update({list_lncRNA[row]: lncRNAlist})
@@ -304,7 +305,7 @@ def generate_TF_sets(list_TF, df_TF_TF_corr):
 
         TFset = set(list_TF) - set(deleted)
         if list_TF[row] not in deleted:
-            TFlist = list(TFset)
+            TFlist = sorted(list(TFset))
         else:
             TFlist = []
         dict_TFsets.update({list_TF[row]: TFlist})
@@ -411,12 +412,13 @@ def generate_TF_target(df_TF_gene_DBS, df_TF_gene_corr, dict_TFsets):
 
 ########################################################################################################################
 # step 7 - identify modules and merge lncRNAs/TFs that regulate the same modules
-def collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared):
+def collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared, dict_lncRNAsets, dict_TFsets):
     '''
     This function collects all lncRNAs' modules (lncRNA target sets) and TFs' modules (TF target sets) into a dict,
     with target genes in the module (a tuple) as key and lncRNAs/TFs that co-regulate the module as values.
     '''
-    dict_module_regulators = {} #
+    dict_module_regulators = {}
+    dict_module_regulator_sets = {}
 
     # zhu
     # dict_lncRNAtarget_shared = {'AC090152.1': {'LRMDA', 'FGFR2', 'ABLIM1', 'TNFSF9'}, 'LINC02783': set(), 'Z99572.1': set(), 'AC010889.1': {'GABRA3', 'ABLIM1'}, 'ZNF790-AS1': {'COL18A1-AS1', 'MED14'}, 'AC125807.2': set()}
@@ -429,6 +431,7 @@ def collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared):
     allModules = [tuple(sorted(module)) for module in list(dict_lncRNAtarget_shared.values()) + list(dict_TFtarget_shared.values()) if len(module) > arg_ModuleSize]
     for module in allModules:
         dict_module_regulators[module] = set()
+        dict_module_regulator_sets[module] = []
 
     for lncRNA in dict_lncRNAtarget_shared:
         module = tuple(sorted(dict_lncRNAtarget_shared[lncRNA]))
@@ -436,14 +439,20 @@ def collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared):
         # module is the key, now the key of lncRNA set is the value, better to use the value of lncRNA set as the value
         if module in dict_module_regulators:
             dict_module_regulators[module].add(lncRNA + '(*)')  # we use * to indicate lncRNA
+            regulator_set = dict_lncRNAsets[lncRNA]
+            if regulator_set and regulator_set not in dict_module_regulator_sets[module]:
+                dict_module_regulator_sets[module].append(regulator_set)
 
     for TF in dict_TFtarget_shared:
         module = tuple(sorted(dict_TFtarget_shared[TF]))
         if module in dict_module_regulators:
             dict_module_regulators[module].add(TF + '(#)')  # we use # to indicate TF
+            regulator_set  = dict_TFsets[TF]
+            if regulator_set and regulator_set not in dict_module_regulator_sets[module]:
+                dict_module_regulator_sets[module].append(regulator_set)
 
     print("dict_module_regulators=", dict_module_regulators)
-    return dict_module_regulators
+    return dict_module_regulators, dict_module_regulator_sets
 
 ########################################################################################################################
 # step 8 - perform pathway enrichment analysis for module genes ### in df_path_module
@@ -501,15 +510,17 @@ def pathway_analysis(dict_module_regulators, kegg_gene, kegg_pathway, kegg_link,
     
 ########################################################################################################################
 # step 9 - write eGRAM results to files in the directory "eGRAM_results/"
-def write_modules(dict_module_regulators, dict_module_kegg, dict_module_wiki, outFile):
-    with open('eGRAM_results/' + outFile, 'w') as f:
-        f.write('\t'.join(['ModuleID',
-                           'LncRNA(*)/TF(#)',
-                           'Target gene',
-                           'KEGG pathway, pathwayID, and FDR',
-                           'Hit genes of enriched KEGG pathways',
-                           'WikiPathway, pathwayID, and FDR',
-                           'Hit genes of enriched Wikipathways'])+'\n')
+def write_modules(dict_module_regulators, dict_module_regulator_sets, dict_module_kegg, dict_module_wiki, outFile):
+    with open('eGRAM_results/' + outFile + '.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['ModuleID',
+                         'LncRNA(*)/TF(#)',
+                         'Regulator set',
+                         'Target gene',
+                         'KEGG pathway, pathwayID, and FDR',
+                         'Hit genes of enriched KEGG pathways',
+                         'WikiPathway, pathwayID, and FDR',
+                         'Hit genes of enriched Wikipathways'])
         moduleID = 0
         for module in dict_module_regulators:
             moduleID += 1
@@ -537,69 +548,76 @@ def write_modules(dict_module_regulators, dict_module_kegg, dict_module_wiki, ou
                 pathway_wiki = hitGenes_wiki = ''
                
             regulators = ' | '.join(dict_module_regulators[module])
+            regulatory_sets = ' | '.join([str(regulatory_set).replace("'",'') for regulatory_set in dict_module_regulator_sets[module]])
             targetGenes = ' | '.join(module)
             
-            f.write('\t'.join(['ME'+str(moduleID),
-                               regulators,
-                               targetGenes,
-                               pathway_kegg,
-                               hitGenes_kegg,
-                               pathway_wiki,
-                               hitGenes_wiki])+'\n')
+            writer.writerow(['ME'+str(moduleID),
+                             regulators,
+                             regulatory_sets,
+                             targetGenes,
+                             pathway_kegg,
+                             hitGenes_kegg,
+                             pathway_wiki,
+                             hitGenes_wiki])
 
 # Generate and write files for module visulization using cytoscape in the 'eGRAM_results/' directory.
 def generate_cytosc_file(moduleFile):
     if '/' not in moduleFile:
         moduleFile = 'eGRAM_results/' + moduleFile
     fileName = moduleFile.split('/')[-1]
-    f_re1 = open('eGRAM_results/' + fileName + '_edge', 'w')
-    f_re1.write('\t'.join(['lncRNA', 'module', 'weight'])+'\n')
-    f_re2 = open('eGRAM_results/' + fileName + '_group', 'w')
-    f_re2.write('\t'.join(['module', 'Keggpathway', 'Wikipathway'])+'\n')
+    f_re = open('eGRAM_results/' + fileName + '_edge', 'w')
+    f_re.write('\t'.join(['lncRNA', 'module', 'weight'])+'\n')
     allLncs = set()
     allTFs = set()
-    with open(moduleFile) as f_mod:
-        f_mod.readline()
-        for line in f_mod:
-            cols = line.strip('\n').split('\t')
-            moduleID = cols[0]
-            regulators = cols[1].split(' | ')
-            
-            kegg_results = cols[3].split('; ')
-            kegg_pathways = []
-            for kegg_result in kegg_results:
-                kegg_pathways.append(kegg_result[:kegg_result.find(' (')])
-            kegg_pathways_str = '; '.join(kegg_pathways)
-            
-            wiki_results = cols[5].split('; ')
-            wiki_pathways = []
-            for wiki_result in wiki_results:
-                wiki_pathways.append(wiki_result[:wiki_result.find(' (')])
-            wiki_pathways_str = '; '.join(wiki_pathways)
+    with open(moduleFile + '.csv') as f_mod:
+        reader = csv.reader(f_mod)
+        first_row = next(reader)
+        for row in reader:
+            moduleID = row[0]
+            regulators = row[1].split(' | ')
             
             for regulator in regulators:
                 regulator_symbol = regulator.split('(')[0]
-                f_re1 .write('\t'.join([regulator_symbol, moduleID, 'NA']) + '\n')
-                if '(*)' in regulator:
-                    allLncs.add(regulator_symbol)
-                elif '(#)' in regulator:
-                    allTFs.add(regulator_symbol)
-            f_re2.write('\t'.join([moduleID, kegg_pathways_str, wiki_pathways_str]) + '\n')
-        for lnc in allLncs:
-            f_re2.write('\t'.join([lnc, 'LncRNA']) + '\n')
-        for TF in allTFs:
-            f_re2.write('\t'.join([TF, 'TF']) + '\n')
-    f_re1.close()
-    f_re2.close()
+                f_re.write('\t'.join([regulator_symbol, moduleID, 'NA']) + '\n')
+    f_re.close()
+    
+# Merge modules with the same gene sets to avoid redundancy    
+def remove_redundancy(dict_module_regulators, dict_module_regulator_sets):
+    dict_module_regulators_noRedundancy = {}
+    dict_module_regulator_sets_noRedundancy = {}
+    for module1 in dict_module_regulators:
+        merge_flag = 0
+        for module2 in dict_module_regulators_noRedundancy:
+            set1 = set(module1)
+            set2 = set(module2)
+            larger_set = max(set1, set2, key=len)
+            intersection = set1.intersection(set2)
+            ratio = len(intersection) / len(larger_set)
+            if ratio > 0.9:
+                intersection_module = tuple(sorted(list(intersection)))
+                dict_module_regulators_noRedundancy[intersection_module] = dict_module_regulators[module1] | dict_module_regulators_noRedundancy[module2]
+                for regulator_set in dict_module_regulator_sets[module1]:
+                    if regulator_set not in dict_module_regulator_sets_noRedundancy[module2]:
+                        dict_module_regulator_sets_noRedundancy[module2].append(regulator_set)
+                        dict_module_regulator_sets_noRedundancy[intersection_module] = dict_module_regulator_sets_noRedundancy[module2]
+                del dict_module_regulators_noRedundancy[module2]
+                del dict_module_regulator_sets_noRedundancy[module2]
+                merge_flag = 1
+                break
+        if merge_flag == 0:
+            dict_module_regulators_noRedundancy[module1] = dict_module_regulators[module1]
+            dict_module_regulator_sets_noRedundancy[module1] = dict_module_regulator_sets[module1]
+    return dict_module_regulators_noRedundancy, dict_module_regulator_sets_noRedundancy
+
 
 # Modify the resulting file name to prevent overwriting existing files
 def check_output(arg_OutFile, resultDir):
     maxFileNum = -1
     for file in os.listdir(resultDir):
-        if file==arg_OutFile and maxFileNum==-1:
+        if file==arg_OutFile + '.csv' and maxFileNum==-1:
             maxFileNum = 0
         elif arg_OutFile+'_' in file:
-            this_fileNum = file.replace(arg_OutFile+'_', '')
+            this_fileNum = file.replace(arg_OutFile+'_', '').replace('.csv', '')
             if this_fileNum.isdigit():
                 this_fileNum = int(this_fileNum)
                 if this_fileNum > maxFileNum:
@@ -608,15 +626,15 @@ def check_output(arg_OutFile, resultDir):
         return
     else:
         newFileNum = maxFileNum + 1
-        newOutFile = arg_OutFile + '_' + str(newFileNum)
+        newOutFile = arg_OutFile + '_' + str(newFileNum) + '.csv'
         return newOutFile
 
 
 ########################################################################################################################
 def usage():
-    print('Usage: python eGRAMv2R1.py --exp gene_exp_file --lncDBS lncRNA_DBS_file --tfDBS TF_DBS_file --species 1 --lncCutoff lncRNA-DBS-cutoff --tfCutoff TF-DBS-cutoff --lncCorr lncRNA-corr-cutoff --tfCorr TF-corr-cutoff --moduleSize modulesize --corr Pearson/Spearman --cluster FLAME/CoCo --fdr 0.01 --out output')
+    print('Usage: python eGRAMv2R1.py --exp gene_exp_file --lncDBS lncRNA_DBS_file --tfDBS TF_DBS_file --species 1 --lncCutoff lncRNA-DBS-cutoff --tfCutoff TF-DBS-cutoff --lncCorr lncRNA-corr-cutoff --tfCorr TF-corr-cutoff --moduleSize modulesize --corr Pearson/Spearman --remove_redundancy y --fdr 0.01 --out output')
     print()
-    print('Example: python eGRAMv2R1.py --exp 2024May-DEG-exp-A549-2513WT.csv --lncDBS 2024May-lncRNA-DBS-A549-2513.csv --tfDBS 2024May-TF-DBS-A549-2513.csv --species 1 --lncCutoff 100 --tfCutoff 8 --lncCorr 0.5 --tfCorr 0.5 --moduleSize 50 --corr Pearson --cluster COCO --fdr 0.01 --out myout')
+    print('Example: python eGRAMv2R1.py --exp 2024May-DEG-exp-A549-2513WT.csv --lncDBS 2024May-lncRNA-DBS-A549-2513.csv --tfDBS 2024May-TF-DBS-A549-2513.csv --species 1 --lncCutoff 100 --tfCutoff 8 --lncCorr 0.5 --tfCorr 0.5 --moduleSize 50 --corr Pearson --remove_redundancy y --fdr 0.01 --out myout')
     print()
     print("""Parameters:
         --exp gene_exp_file is required; if genetype does not have TF, all TF-related functions are not performed. 
@@ -629,7 +647,7 @@ def usage():
         --tfCorr     the correlation threshold for TF/target and TF/TF (default=0.5).
         --moduleSize the minimum gene number of a module (default=50).
         --corr       Pearson/Spearman (default=pearson).
-        --cluster    clustering (default=COCO, see 2018Saelons).
+        --remove_redundancy y/n, whether or not merge modules with the same gene sets (default=y)
         --fdr        the FDR value to determine significance of pathway enrichment (default 0.01).
         --out        output file name.
         """)
@@ -639,7 +657,7 @@ if __name__ == '__main__':
     param = sys.argv[1:]
 
     try:
-        opts, args = getopt.getopt(param, '-h', ['exp=', 'lncDBS=', 'tfDBS=', 'species=', 'lncCutoff=', 'tfCutoff=', 'lncCorr=', 'tfCorr=', 'moduleSize=', 'corr=' , 'cluster=', 'fdr=', 'out='])
+        opts, args = getopt.getopt(param, '-h', ['exp=', 'lncDBS=', 'tfDBS=', 'species=', 'lncCutoff=', 'tfCutoff=', 'lncCorr=', 'tfCorr=', 'moduleSize=', 'corr=', 'remove_redundancy=', 'fdr=', 'out='])
     except getopt.GetoptError:
         usage()
         sys.exit(2)
@@ -669,8 +687,8 @@ if __name__ == '__main__':
             arg_ModuleSize = int(arg)
         elif opt == '--corr':
             arg_Pearson = arg
-        elif opt == '--cluster':
-            arg_Clustering = arg
+        elif opt == '--remove_redundancy':
+            arg_RemoveRedundancy = arg
         elif opt == '--fdr':
             arg_fdrCutoff = float(arg)
         elif opt == '--out':
@@ -691,8 +709,10 @@ if __name__ == '__main__':
         arg_ModuleSize = 50
     if 'arg_Pearson' not in dir():
         arg_Pearson = 'Pearson'
-    if 'arg_Clustering' not in dir():
-        arg_Clustering = 'COCO'
+    if 'remove_redundancy' not in dir():
+        arg_RemoveRedundancy = 'y'
+    elif arg_RemoveRedundancy != 'n' and arg_RemoveRedundancy != 'y':
+        arg_RemoveRedundancy = 'y'
     if 'arg_fdrCutoff' not in dir():
         arg_fdrCutoff = 0.01
     if arg_SpeciesPath == 1:
@@ -738,7 +758,9 @@ if __name__ == '__main__':
         dict_TFtarget_shared = {}
 
     # step 7 - identify modules and merge lncRNAs/TFs that regulate the same modules
-    dict_module_regulators = collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared)
+    dict_module_regulators, dict_module_regulator_sets = collect_modules(dict_lncRNAtarget_shared, dict_TFtarget_shared, dict_lncRNAsets, dict_TFsets)
+    if arg_RemoveRedundancy == 'y':
+        dict_module_regulators, dict_module_regulator_sets = remove_redundancy(dict_module_regulators, dict_module_regulator_sets)
     
     # step 8 - perform pathway enrichment analysis for module genes in df_path_module. KEGG gene annotation is used.
     dict_module_kegg = pathway_analysis(dict_module_regulators, kegg_gene, kegg_pathway, kegg_link, totalGeneNum, arg_fdrCutoff)
@@ -749,6 +771,6 @@ if __name__ == '__main__':
     if newOutFile:
         arg_OutFile = newOutFile
         print('A result file with the same name already exists, the newly generated file is named with '+ newOutFile + '.')
-    write_modules(dict_module_regulators, dict_module_kegg, dict_module_wiki, arg_OutFile)
+    write_modules(dict_module_regulators, dict_module_regulator_sets, dict_module_kegg, dict_module_wiki, arg_OutFile)
     
     generate_cytosc_file(arg_OutFile)
